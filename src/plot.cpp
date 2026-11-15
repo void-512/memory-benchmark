@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <locale>
 #include <sstream>
 #include <stdexcept>
@@ -200,10 +201,14 @@ void save(const std::filesystem::path& path, const std::string& document) {
 
 void render(const std::vector<Point>& points, const Config& c) {
     if (points.empty()) throw std::runtime_error("Cannot plot an empty sweep");
-    const auto bandwidth = draw(points, c, true);
-    const auto latency = draw(points, c, false);
     std::filesystem::create_directories(c.output);
-    save(c.output / "bandwidth.svg", bandwidth);
-    save(c.output / "latency.svg", latency);
+    for (bool bandwidth : {true, false}) {
+        const auto path = c.output / (bandwidth ? "bandwidth.svg" : "latency.svg");
+        std::cout << "Rendering " << path << "..." << std::endl;
+        const auto document = draw(points, c, bandwidth);
+        std::cout << "Writing " << path << "..." << std::endl;
+        save(path, document);
+        std::cout << "SVG generation finished: " << path << std::endl;
+    }
 }
 } // namespace cb

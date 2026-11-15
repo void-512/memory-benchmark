@@ -47,6 +47,11 @@ add_executable(cachebench
   src/measure.cpp
   src/plot.cpp)
 target_link_libraries(cachebench PRIVATE cachebench_kernels trase_svg mimalloc-static)
+if(MINGW)
+  # LLVM-MinGW defaults to libc++.dll, whose internal new/delete calls do not
+  # use the executable's mimalloc overrides. Keep C++ allocations in one heap.
+  target_link_options(cachebench PRIVATE -static)
+endif()
 foreach(target trase_svg mimalloc-static cachebench_kernels cachebench)
   set_target_properties(${target} PROPERTIES INTERPROCEDURAL_OPTIMIZATION FALSE)
 endforeach()
