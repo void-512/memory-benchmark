@@ -1,0 +1,6 @@
+[submodule "3rdparty/trase"]
+	path = 3rdparty/trase
+	url = https://github.com/trase-cpp/trase.git
+[submodule "3rdparty/mimalloc"]
+	path = 3rdparty/mimalloc
+	url = https://github.com/microsoft/mimalloc.git
