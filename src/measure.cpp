@@ -25,15 +25,28 @@ template<class Execute, class Validate, class Convert>
 Measurement sample(const Config& c, std::uint64_t quantum, std::uint64_t cap,
                    Execute execute, Validate validate, Convert convert) {
     const double target = c.sample_ms * 1e6;
+    const auto max_count = cap / quantum * quantum;
+    const auto grow = [max_count](std::uint64_t n) {
+        return n > max_count / 8 ? max_count : n * 8;
+    };
     auto count = quantum;
-    const auto timed = [&](std::uint64_t n) {
-        const auto start = Clock::now();
-        execute(n);
-        const auto finish = Clock::now();
-        const double ns = std::chrono::duration<double, std::nano>(finish - start).count();
-        validate(n); // full result checks and sink stores are OUTSIDE timing
-        if (!std::isfinite(ns) || ns <= 0) throw std::runtime_error("Clock did not advance");
-        return ns;
+    const auto timed = [&](std::uint64_t& n) {
+        for (unsigned attempt = 0; attempt < 16; ++attempt) {
+            const auto start = Clock::now();
+            execute(n);
+            const auto finish = Clock::now();
+            const double ns = std::chrono::duration<double, std::nano>(finish - start).count();
+            validate(n); // full result checks and sink stores are OUTSIDE timing
+            if (!std::isfinite(ns) || ns < 0)
+                throw std::runtime_error("Clock returned an invalid elapsed time");
+            if (ns > 0) return ns;
+            // Equal timestamps are valid for work shorter than one timer tick.
+            // Retry a larger full-cycle/pass batch; never divide by zero or
+            // invent a duration. Update n so rates and counts use the final batch.
+            if (n == max_count) break;
+            n = grow(n);
+        }
+        throw std::runtime_error("Clock did not advance after increasing batch size to the retry or operation limit");
     };
     const auto adjust = [&](std::uint64_t n, double ns) {
         // Round to full cycles/passes and cap all conversion/multiplication.
@@ -47,13 +60,13 @@ Measurement sample(const Config& c, std::uint64_t quantum, std::uint64_t cap,
     bool calibrated = false;
     for (unsigned attempt = 0; attempt < 16; ++attempt) {
         const double ns = timed(count);
-        if (ns >= target || count == cap / quantum * quantum) {
+        if (ns >= target || count == max_count) {
             calibrated = true;
             break;
         }
         // Limit growth to 8x so a very short first clock reading cannot cause
         // an excessive batch. Counts are always exact full cycles/passes.
-        count = std::min(adjust(count, ns), count * 8);
+        count = std::min(adjust(count, ns), grow(count));
     }
     if (!calibrated) throw std::runtime_error("Could not calibrate within bounded attempts");
 
